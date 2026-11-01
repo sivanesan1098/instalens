@@ -572,7 +572,7 @@
       // For Reel/Video mode, connect to WebSocket for real-time progress
       let ws = null;
       if (mode === "reel") {
-        const wsUrl = `ws://localhost:8000/ws/progress/${shortcode}`;
+        const wsUrl = `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/ws/progress/${shortcode}`;
         ws = new WebSocket(wsUrl);
         ws.onopen = () => {
           console.log("WebSocket connected for progress updates");
