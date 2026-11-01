@@ -1,0 +1,957 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ReelBrief — Instagram Video Summarizer & Separate Link Extractor</title>
+  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+    .ig-gradient {
+      background: linear-gradient(135deg, #f97316 0%, #ec4899 50%, #8b5cf6 100%);
+    }
+    .ig-border {
+      background: linear-gradient(#ffffff, #ffffff) padding-box,
+                  linear-gradient(135deg, #f97316, #ec4899, #8b5cf6) border-box;
+      border: 2px solid transparent;
+    }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-900 min-h-screen flex flex-col">
+
+  <!-- Top Navigation Bar -->
+  <header class="bg-white border-b border-slate-200 sticky top-0 z-30">
+    <div class="max-w-5xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-3">
+      <div class="flex items-center gap-3">
+        <div class="w-9 h-9 rounded-xl ig-gradient flex items-center justify-center text-white font-bold shadow-sm">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+            <rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect>
+            <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path>
+            <line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line>
+          </svg>
+        </div>
+        <div>
+          <h1 class="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900 leading-none">ReelBrief</h1>
+          <p class="text-xs text-slate-500 mt-0.5">Instagram Video Summarizer &amp; Link Extractor</p>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-2">
+        <span id="backendDot" class="w-2 h-2 rounded-full bg-emerald-500"></span>
+        <span id="backendLabel" class="text-xs font-medium text-slate-600">Live Backend · localhost:8000</span>
+        <button id="openGuideBtn" type="button" class="text-xs font-medium px-3 py-1.5 rounded-lg bg-slate-900 text-white hover:bg-slate-800 transition">
+          How It Works
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Content Container -->
+  <main class="flex-1 max-w-5xl w-full mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-6">
+
+    <!-- URL Input & Custom Data Card -->
+    <section class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 sm:p-6 space-y-4">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+        <div>
+          <h2 class="text-xl font-bold text-slate-900">1. Paste Instagram Video or Reel Link</h2>
+          <p class="text-xs text-slate-500">Extracts audio transcript, on-screen OCR text, and post caption — displaying video links and caption links separately.</p>
+        </div>
+        <div class="flex flex-wrap items-center gap-1.5">
+          <span class="text-xs text-slate-400 font-medium mr-1">Mode:</span>
+          <button id="modeReel" type="button" class="mode-btn text-xs font-medium px-3 py-1.5 rounded-lg bg-slate-900 text-white">Reel / Video</button>
+          <button id="modePost" type="button" class="mode-btn text-xs font-medium px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:text-slate-900">Single Post</button>
+          <button id="modeProfile" type="button" class="mode-btn text-xs font-medium px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:text-slate-900">Profile / Stack</button>
+          <span id="modeHint" class="text-xs text-slate-500">Paste a reel URL and extract — results come from the live backend.</span>
+        </div>
+      </div>
+
+      <!-- Main URL Input Row -->
+      <div class="flex flex-col sm:flex-row gap-2.5">
+        <div class="relative flex-1">
+          <input
+            id="reelUrlInput"
+            type="url"
+            placeholder="https://www.instagram.com/reel/C8x9kLmN2pQ/..."
+            class="w-full pl-10 pr-9 py-3 rounded-xl border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-pink-500 transition"
+          />
+          <svg class="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"></path>
+          </svg>
+          <button id="clearUrlBtn" type="button" title="Clear link" class="text-slate-400 hover:text-slate-600 absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold px-1">
+            ✕
+          </button>
+        </div>
+
+        <button
+          id="extractBtn"
+          type="button"
+          class="ig-gradient text-white font-semibold text-sm px-6 py-3 rounded-xl shadow-sm hover:opacity-95 active:scale-[0.99] transition flex items-center justify-center gap-2 shrink-0"
+        >
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+            <polygon points="5 3 19 12 5 21 5 3"></polygon>
+          </svg>
+          <span>Extract &amp; Summarize</span>
+        </button>
+      </div>
+
+      <!-- Pipeline Status Bar -->
+      <div id="pipelineStatus" class="hidden rounded-xl bg-slate-900 text-white px-4 py-3 text-xs flex flex-wrap items-center justify-between gap-2">
+        <div class="flex items-center gap-2.5">
+          <span class="w-2.5 h-2.5 rounded-full bg-pink-400 animate-ping"></span>
+          <span id="pipelineStepText" class="font-medium">Extracting video metadata, frame OCR, and caption links...</span>
+        </div>
+        <span id="pipelineShortcodeBadge" class="text-[11px] font-mono bg-slate-800 px-2 py-0.5 rounded text-slate-300"></span>
+      </div>
+    </section>
+
+    <!-- SEPARATE LINKS SECTION (Primary Requirement: Video Links vs Caption Links) -->
+    <section class="space-y-3">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+        <div class="flex items-center gap-2">
+          <h2 class="text-xl font-bold text-slate-900">2. Extracted Links (Displayed Separately)</h2>
+          <span id="totalLinksBadge" class="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-slate-900 text-white">0 links found</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <button id="copyAllLinksBtn" type="button" class="text-xs font-medium px-3 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-100 text-slate-700 transition">
+            Copy All Links
+          </button>
+          <button id="exportJsonBtn" type="button" class="text-xs font-medium px-3 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-100 text-slate-700 transition">
+            Export JSON
+          </button>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <!-- Panel A: Links Shown in Video (OCR / Audio) -->
+        <div class="bg-white rounded-2xl shadow-sm border-2 border-indigo-200 p-5 flex flex-col justify-between space-y-4">
+          <div class="space-y-3">
+            <div class="flex items-center justify-between gap-2">
+              <div class="flex items-center gap-2">
+                <span class="w-8 h-8 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold text-sm">
+                  🎬
+                </span>
+                <div>
+                  <h3 class="text-base font-bold text-slate-900">Links Shown in Video</h3>
+                  <p class="text-[11px] text-slate-500">Detected via Frame OCR &amp; Spoken Audio</p>
+                </div>
+              </div>
+              <span id="videoLinksCount" class="text-xs font-bold px-2.5 py-1 rounded-full bg-indigo-50 text-indigo-700">0</span>
+            </div>
+
+            <div id="videoLinksList" class="space-y-2.5">
+              <div class="text-xs text-slate-400 italic py-4 text-center">Paste a reel URL and hit Extract to see on-screen &amp; spoken links here.</div>
+            </div>
+          </div>
+
+          <div class="pt-3 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-400">
+            <span>Scanned keyframes at 0.5 FPS + transcript</span>
+            <button id="copyVideoLinksBtn" type="button" class="text-indigo-600 hover:text-indigo-800 font-semibold">
+              Copy video links
+            </button>
+          </div>
+        </div>
+
+        <!-- Panel B: Links in Caption & Bio -->
+        <div class="bg-white rounded-2xl shadow-sm border-2 border-pink-200 p-5 flex flex-col justify-between space-y-4">
+          <div class="space-y-3">
+            <div class="flex items-center justify-between gap-2">
+              <div class="flex items-center gap-2">
+                <span class="w-8 h-8 rounded-lg bg-pink-100 text-pink-700 flex items-center justify-center font-bold text-sm">
+                  📝
+                </span>
+                <div>
+                  <h3 class="text-base font-bold text-slate-900">Links in Caption &amp; Bio</h3>
+                  <p class="text-[11px] text-slate-500">Extracted from Post Description &amp; Callouts</p>
+                </div>
+              </div>
+              <span id="captionLinksCount" class="text-xs font-bold px-2.5 py-1 rounded-full bg-pink-50 text-pink-700">0</span>
+            </div>
+
+            <div id="captionLinksList" class="space-y-2.5">
+              <div class="text-xs text-slate-400 italic py-4 text-center">Caption &amp; bio links will appear here after extraction.</div>
+            </div>
+          </div>
+
+          <div class="pt-3 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-400">
+            <span>Parsed URLs, bare domains &amp; bio pointers</span>
+            <button id="copyCaptionLinksBtn" type="button" class="text-pink-600 hover:text-pink-800 font-semibold">
+              Copy caption links
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- VIDEO SUMMARY & EXTRACTED DATA SECTION -->
+    <section class="grid grid-cols-1 lg:grid-cols-12 gap-5">
+      <!-- Left 7 cols: Structured AI Video Summary -->
+      <div class="lg:col-span-7 bg-white rounded-2xl shadow-sm border border-slate-200 p-5 sm:p-6 space-y-4">
+        <div class="flex items-start justify-between gap-3">
+          <div>
+            <div class="flex items-center gap-2">
+              <span id="reelAuthorBadge" class="text-xs font-semibold px-2.5 py-0.5 rounded-md bg-slate-100 text-slate-700">@creator</span>
+              <span id="reelDurationBadge" class="text-xs text-slate-400 font-mono">0:42</span>
+              <span id="reelShortcodeText" class="text-xs text-slate-400 font-mono">ID: C9xAiTools77</span>
+            </div>
+            <h2 id="reelTitleHeading" class="text-xl font-bold text-slate-900 mt-1">
+              3 Open-Source AI Video &amp; Coding Tools You Should Know
+            </h2>
+          </div>
+          <button id="copySummaryBtn" type="button" class="text-xs font-medium px-3 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-100 text-slate-700 shrink-0 transition">
+            Copy Summary
+          </button>
+        </div>
+
+        <!-- TL;DR Box -->
+        <div class="rounded-xl bg-gradient-to-r from-orange-50 via-pink-50 to-purple-50 border border-pink-100 p-4">
+          <div class="text-[11px] font-bold uppercase tracking-wider text-pink-700 mb-1">TL;DR Summary</div>
+          <p id="summaryTldrText" class="text-sm text-slate-800 leading-relaxed"></p>
+        </div>
+
+        <!-- Key Takeaways -->
+        <div>
+          <h3 class="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2.5">Key Takeaways &amp; Timestamps</h3>
+          <ul id="summaryBulletsList" class="space-y-2 text-sm text-slate-700">
+            <!-- Populated by JS -->
+          </ul>
+        </div>
+
+        <!-- Tags / Topics -->
+        <div id="summaryTagsContainer" class="pt-2 flex flex-wrap gap-1.5">
+          <!-- Populated by JS -->
+        </div>
+      </div>
+
+      <!-- Right 5 cols: Extracted Raw Video Data (OCR Frames, Transcript, Caption) -->
+      <div class="lg:col-span-5 bg-white rounded-2xl shadow-sm border border-slate-200 p-5 sm:p-6 flex flex-col justify-between space-y-4">
+        <div class="space-y-3">
+          <div class="flex items-center justify-between border-b border-slate-200 pb-2.5">
+            <h3 class="text-base font-bold text-slate-900">3. Extracted Video Data</h3>
+            <div class="flex items-center gap-1 bg-slate-100 p-1 rounded-lg">
+              <button type="button" data-tab="ocr" class="data-tab-btn text-xs font-semibold px-2.5 py-1 rounded-md bg-white text-slate-900 shadow-sm">
+                Frame OCR
+              </button>
+              <button type="button" data-tab="transcript" class="data-tab-btn text-xs font-medium px-2.5 py-1 rounded-md text-slate-600 hover:text-slate-900">
+                Transcript
+              </button>
+              <button type="button" data-tab="caption" class="data-tab-btn text-xs font-medium px-2.5 py-1 rounded-md text-slate-600 hover:text-slate-900">
+                Caption
+              </button>
+            </div>
+          </div>
+
+          <!-- Tab Content: Frame OCR -->
+          <div id="tabPanelOcr" class="space-y-2 max-h-72 overflow-y-auto pr-1"></div>
+
+          <!-- Tab Content: Spoken Transcript -->
+          <div id="tabPanelTranscript" class="hidden space-y-2 max-h-72 overflow-y-auto pr-1 text-xs text-slate-700 leading-relaxed font-mono bg-slate-50 p-3 rounded-xl border border-slate-200"></div>
+
+          <!-- Tab Content: Raw Caption -->
+          <div id="tabPanelCaption" class="hidden max-h-72 overflow-y-auto pr-1 text-xs text-slate-700 leading-relaxed whitespace-pre-wrap bg-slate-50 p-3 rounded-xl border border-slate-200"></div>
+        </div>
+
+        <div class="rounded-xl bg-slate-50 border border-slate-200 p-3 text-[11px] text-slate-500 flex items-center justify-between">
+          <span>Links inside raw data are automatically highlighted &amp; deduplicated.</span>
+          <span id="activeTabBadge" class="font-semibold text-slate-700">OCR Frames</span>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- How It Works / Local Backend Modal -->
+  <div id="guideModal" class="hidden fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-lg w-full p-6 shadow-xl border border-slate-200 space-y-4">
+      <div class="flex items-center justify-between">
+        <h3 class="text-base font-bold text-slate-900">How ReelBrief Extracts &amp; Separates Links</h3>
+        <button id="closeGuideBtn" type="button" class="text-slate-400 hover:text-slate-700 text-sm font-bold px-2 py-1">✕</button>
+      </div>
+      <div class="space-y-3 text-xs text-slate-600 leading-relaxed">
+        <p>
+          <strong>1. Video Stream &amp; Frame OCR Links:</strong> Samples keyframes from the Instagram video (via <code class="bg-slate-100 px-1 py-0.5 rounded">yt-dlp</code> + <code class="bg-slate-100 px-1 py-0.5 rounded">OpenCV</code> + <code class="bg-slate-100 px-1 py-0.5 rounded">pytesseract</code>) and audio transcript (<code class="bg-slate-100 px-1 py-0.5 rounded">faster-whisper</code>) to capture URLs flashed on screen or spoken aloud, tagging each with its timestamp.
+        </p>
+        <p>
+          <strong>2. Caption &amp; Bio Links:</strong> Parses the post caption separately so URLs in the description or "link in bio" pointers are never mixed up with on-screen video links.
+        </p>
+        <p>
+          <strong>3. Running the backend:</strong> Install dependencies and start the server with <code class="bg-slate-100 px-1 py-0.5 rounded">uvicorn backend:app --host 0.0.0.0 --port 8000</code>. The frontend is served at <code class="bg-slate-100 px-1 py-0.5 rounded">/</code> and calls <code class="bg-slate-100 px-1 py-0.5 rounded">/api/extract</code> — one process serves both, so it's deployable as a standalone web app (container, Render, Fly, etc.).
+        </p>
+      </div>
+      <div class="pt-2 flex justify-end">
+        <button id="closeGuideFooterBtn" type="button" class="px-4 py-2 rounded-xl bg-slate-900 text-white text-xs font-semibold hover:bg-slate-800">
+          Got it
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notification -->
+  <div id="toastBox" class="fixed bottom-5 right-5 z-50 hidden bg-slate-900 text-white text-xs font-medium px-4 py-2.5 rounded-xl shadow-lg">
+    Copied to clipboard!
+  </div>
+
+  <script>
+    // No preset datasets — every extraction runs against the live backend
+    // (http://localhost:8000/api/extract) so results reflect the real reel.
+    let currentResult = null;
+
+    // Regex that captures full URLs (https://...) and bare domains (github.com/..., reeldex.io, etc.)
+    const LINK_REGEX = /(?:https?:\/\/|www\.)[^\s<>"'`)\]]+|\b(?:[a-zA-Z0-9-]+\.)+(?:com|io|ai|dev|org|net|co|app|me|ly|gg|sh|xyz|ee|tv|so|link|notion|substack|gumroad|patreon|etsy|shopify|spotify|soundcloud|bandcamp|vimeo|dailymotion|loom|streamable|clips|cdn|store)(?:\/[^\s<>"'`)\]]*)?/gi;
+
+    function normalizeUrl(raw) {
+      const cleaned = raw.replace(/[.,;:!?)]+$/, "");
+      if (/^https?:\/\//i.test(cleaned)) return cleaned;
+      return "https://" + cleaned;
+    }
+
+    function extractLinksFromText(text, sourceLabel, defaultTimestamp) {
+      if (!text) return [];
+      const results = [];
+      const seen = new Set();
+      const lines = text.split("\n");
+
+      for (const line of lines) {
+        const tsMatch = line.match(/\[(\d+:\d{2})\]/);
+        const lineTs = tsMatch ? tsMatch[1] : (defaultTimestamp || null);
+        const matches = line.match(LINK_REGEX) || [];
+        for (const m of matches) {
+          const cleaned = m.replace(/[.,;:!?)]+$/, "");
+          const norm = normalizeUrl(cleaned);
+          const key = norm.toLowerCase();
+          if (!seen.has(key)) {
+            seen.add(key);
+            results.push({
+              raw: cleaned,
+              url: norm,
+              source: sourceLabel,
+              timestamp: lineTs,
+              context: line.replace(/\[\d+:\d{2}\]\s*/, "").trim()
+            });
+          }
+        }
+      }
+      return results;
+    }
+
+    function parseShortcode(url) {
+      const m = (url || "").match(/\/(?:reel|reels|p|tv)\/([A-Za-z0-9_-]+)/i);
+      return m ? m[1] : "CustomLink";
+    }
+
+    function copyTextToClipboard(text, message) {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(() => showToast(message)).catch(() => fallbackCopy(text, message));
+      } else {
+        fallbackCopy(text, message);
+      }
+    }
+
+    function fallbackCopy(text, message) {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.style.position = "fixed";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.select();
+      try {
+        document.execCommand("copy");
+        showToast(message);
+      } catch (err) {
+        showToast("Copy complete");
+      }
+      document.body.removeChild(ta);
+    }
+
+    function showToast(msg) {
+      const box = document.getElementById("toastBox");
+      box.textContent = msg;
+      box.classList.remove("hidden");
+      clearTimeout(window.__toastTimer);
+      window.__toastTimer = setTimeout(() => {
+        box.classList.add("hidden");
+      }, 2200);
+    }
+
+    function renderLinkCard(item, accent) {
+      const badgeClass = accent === "indigo"
+        ? "bg-indigo-100 text-indigo-800"
+        : "bg-pink-100 text-pink-800";
+      const tsPill = item.timestamp
+        ? `<span class="text-[11px] font-mono font-semibold px-2 py-0.5 rounded ${badgeClass}">⏱ ${item.timestamp}</span>`
+        : `<span class="text-[11px] font-semibold px-2 py-0.5 rounded ${badgeClass}">${item.source}</span>`;
+
+      return `
+        <div class="p-3 rounded-xl bg-slate-50 border border-slate-200 hover:border-slate-300 transition flex flex-col gap-1.5">
+          <div class="flex items-center justify-between gap-2">
+            <div class="flex items-center gap-2 min-w-0">
+              ${tsPill}
+              <a href="${item.url}" target="_blank" rel="noopener noreferrer" class="text-xs sm:text-sm font-semibold text-slate-900 hover:text-pink-600 truncate underline decoration-slate-300">
+                ${item.raw}
+              </a>
+            </div>
+            <div class="flex items-center gap-1 shrink-0">
+              <button type="button" data-copy-url="${item.url}" class="copy-single-btn text-[11px] font-medium px-2 py-1 rounded-md bg-white border border-slate-200 hover:bg-slate-100 text-slate-700">
+                Copy
+              </button>
+              <a href="${item.url}" target="_blank" rel="noopener noreferrer" class="text-[11px] font-medium px-2 py-1 rounded-md bg-slate-900 text-white hover:bg-slate-800">
+                Open ↗
+              </a>
+            </div>
+          </div>
+          ${item.context ? `<p class="text-[11px] text-slate-500 truncate">${item.context}</p>` : ""}
+        </div>
+      `;
+    }
+
+    function renderResult(data) {
+      currentResult = data;
+
+      // Use backend-extracted links if present; fallback to client regex parsing
+      // when the backend returns empty arrays (e.g. OCR/whisper failed or caption has no links).
+      let videoLinks = data.backendVideoLinks;
+      let captionLinks = data.backendCaptionLinks;
+
+      if ((!videoLinks || !videoLinks.length) && (!captionLinks || !captionLinks.length)) {
+        const videoMap = new Map();
+        for (const frame of data.ocrFrames) {
+          for (const lk of extractLinksFromText(frame.text, "Frame OCR", frame.timestamp)) {
+            if (!videoMap.has(lk.url.toLowerCase())) videoMap.set(lk.url.toLowerCase(), lk);
+          }
+        }
+        for (const lk of extractLinksFromText(data.transcript, "Spoken Audio", null)) {
+          if (!videoMap.has(lk.url.toLowerCase())) videoMap.set(lk.url.toLowerCase(), lk);
+        }
+        videoLinks = Array.from(videoMap.values());
+        captionLinks = extractLinksFromText(data.caption, "Post Caption", null);
+      } else {
+        // Backend returned some links — use them but also check caption for any missed links
+        if ((!captionLinks || !captionLinks.length) && data.caption) {
+          captionLinks = extractLinksFromText(data.caption, "Post Caption", null);
+        }
+      }
+
+      // Update counts
+      document.getElementById("videoLinksCount").textContent = String(videoLinks.length);
+      document.getElementById("captionLinksCount").textContent = String(captionLinks.length);
+      document.getElementById("totalLinksBadge").textContent = `${videoLinks.length + captionLinks.length} links separated`;
+
+      // Render Video Links List
+      const videoListEl = document.getElementById("videoLinksList");
+      if (videoLinks.length === 0) {
+        videoListEl.innerHTML = `<div class="text-xs text-slate-400 italic py-4 text-center">No on-screen or spoken links detected in video frames.</div>`;
+      } else {
+        videoListEl.innerHTML = videoLinks.map(lk => renderLinkCard(lk, "indigo")).join("");
+      }
+
+      // Render Caption Links List
+      const captionListEl = document.getElementById("captionLinksList");
+      if (captionLinks.length === 0) {
+        captionListEl.innerHTML = `<div class="text-xs text-slate-400 italic py-4 text-center">No links found in the post caption.</div>`;
+      } else {
+        captionListEl.innerHTML = captionLinks.map(lk => renderLinkCard(lk, "pink")).join("");
+      }
+
+      // Attach copy handlers for individual link buttons
+      document.querySelectorAll(".copy-single-btn").forEach(btn => {
+        btn.addEventListener("click", () => {
+          const urlToCopy = btn.getAttribute("data-copy-url");
+          copyTextToClipboard(urlToCopy, `Copied ${urlToCopy}`);
+        });
+      });
+
+      // Populate Summary Card
+      document.getElementById("reelAuthorBadge").textContent = data.author;
+      document.getElementById("reelDurationBadge").textContent = data.duration;
+      document.getElementById("reelShortcodeText").textContent = `ID: ${data.shortcode}`;
+      document.getElementById("reelTitleHeading").textContent = data.title;
+      document.getElementById("summaryTldrText").textContent = data.tldr;
+
+      const bulletsEl = document.getElementById("summaryBulletsList");
+      bulletsEl.innerHTML = data.bullets.map(b => `
+        <li class="flex items-start gap-2">
+          <span class="w-1.5 h-1.5 rounded-full bg-pink-500 mt-2 shrink-0"></span>
+          <span>${b}</span>
+        </li>
+      `).join("");
+
+      const tagsEl = document.getElementById("summaryTagsContainer");
+      tagsEl.innerHTML = (data.tags || []).map(t => `
+        <span class="text-[11px] font-medium px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-600">${t}</span>
+      `).join("");
+
+      // Populate Raw Data Tabs
+      const ocrEl = document.getElementById("tabPanelOcr");
+      ocrEl.innerHTML = data.ocrFrames.map(f => `
+        <div class="p-2.5 rounded-lg bg-slate-50 border border-slate-200 text-xs flex items-start gap-2">
+          <span class="font-mono font-semibold text-indigo-600 shrink-0">[${f.timestamp}]</span>
+          <span class="text-slate-700">${f.text}</span>
+        </div>
+      `).join("");
+
+      document.getElementById("tabPanelTranscript").textContent = data.transcript;
+      document.getElementById("tabPanelCaption").textContent = data.caption;
+
+      // Save computed arrays on currentResult for export/copy
+      currentResult._videoLinks = videoLinks;
+      currentResult._captionLinks = captionLinks;
+    }
+
+    async function handleExtract() {
+      const urlInput = document.getElementById("reelUrlInput").value.trim();
+
+      if (!urlInput) {
+        showToast("Please paste an Instagram link first.");
+        return;
+      }
+      if (!/^https?:\/\//i.test(urlInput)) {
+        showToast("That doesn't look like an Instagram link — paste a full https:// URL.");
+        return;
+      }
+
+      const statusBox = document.getElementById("pipelineStatus");
+      const stepText = document.getElementById("pipelineStepText");
+      const codeBadge = document.getElementById("pipelineShortcodeBadge");
+      const shortcode = parseShortcode(urlInput);
+
+      statusBox.classList.remove("hidden");
+      codeBadge.textContent = `Shortcode: ${shortcode}`;
+
+      // Determine endpoint based on selected mode
+      const mode = currentMode || "reel";
+      let backendUrl;
+      let stepLabel;
+      if (mode === "post") {
+        backendUrl = "http://localhost:8000/api/extract/post";
+        stepLabel = "Fetching post metadata & caption links...";
+      } else if (mode === "profile") {
+        backendUrl = "http://localhost:8000/api/extract/profile";
+        stepLabel = "Fetching profile posts & caption links...";
+      } else {
+        backendUrl = "http://localhost:8000/api/extract";
+        stepLabel = "Step 1/3: Downloading Instagram video via yt-dlp...";
+      }
+      stepText.textContent = stepLabel;
+
+      // Probe /health first so a missing dependency reports as a clear message
+      // ("whisper not installed") instead of a silent empty result.
+      try {
+        const health = await fetch("http://localhost:8000/health");
+        if (health.ok) {
+          const h = await health.json();
+          const missing = Object.entries(h.components || {}).filter(([, v]) => !v).map(([k]) => k);
+          if (missing.length) {
+            stepText.textContent = `Backend reachable; unavailable components: ${missing.join(", ")}. Results may be partial.`;
+          }
+        }
+      } catch (_) { /* health probe is advisory — extraction still runs */ }
+
+      let resp;
+      try {
+        resp = await fetch(backendUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url: urlInput, caption_override: null })
+        });
+      } catch (err) {
+        statusBox.classList.add("hidden");
+        showToast("Backend unreachable — is uvicorn running on :8000?");
+        return;
+      }
+
+      if (!resp.ok) {
+        statusBox.classList.add("hidden");
+        let detail = "Unknown error";
+        try {
+          const errBody = await resp.json();
+          detail = errBody.detail || JSON.stringify(errBody);
+        } catch (_) { /* ignore */ }
+        showToast(`Backend error (${resp.status}): ${detail.slice(0, 120)}`);
+        return;
+      }
+
+      const apiData = await resp.json();
+      stepText.textContent = "Processing results...";
+
+      if (mode === "post") {
+        renderPostResult(normalizePostData(apiData));
+      } else if (mode === "profile") {
+        renderProfileResult(normalizeProfileData(apiData));
+      } else {
+        renderResult(normalizeApiData(apiData));
+      }
+      statusBox.classList.add("hidden");
+      showToast("Extracted via Live Backend!");
+    }
+
+    function formatDuration(seconds) {
+      // Backend returns a float; guard null/NaN so the UI never throws.
+      if (seconds == null || Number.isNaN(Number(seconds))) return "0:00";
+      const total = Math.floor(Number(seconds));
+      const m = Math.floor(total / 60);
+      const s = total % 60;
+      return `${m}:${String(s).padStart(2, "0")}`;
+    }
+
+    // Single normalization point between the backend's response shape and the
+    // frontend's expected shape. If the backend renames a field, only this
+    // function changes — renderResult() stays stable.
+    function normalizeApiData(apiData) {
+      const ocrFrames = apiData.ocr_snippets || apiData.ocrFrames || [];
+      // Map backend ExtractedLink shape -> frontend link card shape
+      const mapLink = (l) => ({
+        raw: l.url || l.raw,
+        url: l.normalized_url || l.url,
+        source: l.source === "video_ocr" ? "Frame OCR" : l.source === "transcript" ? "Spoken Audio" : (l.source || "Link"),
+        timestamp: l.timestamp || null,
+        context: l.context || ""
+      });
+      return {
+        url: apiData.reel_url || apiData.url,
+        shortcode: apiData.shortcode,
+        author: apiData.author,
+        duration: formatDuration(apiData.duration_seconds),
+        title: apiData.title,
+        tldr: apiData.summary_tldr || apiData.tldr,
+        bullets: apiData.key_points || apiData.bullets || [],
+        tags: apiData.tags || ["#LiveExtracted", "#InstagramReel"],
+        ocrFrames: ocrFrames.length ? ocrFrames : [{ timestamp: "0:00", text: "(No on-screen text detected)" }],
+        transcript: apiData.transcript || "(No transcript available)",
+        caption: apiData.caption || "(No caption available)",
+        // Preserve backend-extracted link lists directly when present
+        backendVideoLinks: (apiData.video_links || []).map(mapLink),
+        backendCaptionLinks: (apiData.caption_links || []).map(mapLink)
+      };
+    }
+
+    function normalizePostData(apiData) {
+      const mapLink = (l) => ({
+        raw: l.url || l.raw,
+        url: l.normalized_url || l.url,
+        source: l.source || "Caption",
+        timestamp: l.timestamp || null,
+        context: l.context || ""
+      });
+      return {
+        url: apiData.post_url || apiData.url,
+        shortcode: apiData.shortcode,
+        author: apiData.author,
+        duration: formatDuration(apiData.duration_seconds),
+        title: apiData.title,
+        tldr: apiData.summary_tldr || apiData.tldr,
+        bullets: apiData.key_points || apiData.bullets || [],
+        tags: apiData.tags || ["#LiveExtracted", "#InstagramPost"],
+        caption: apiData.caption || "",
+        thumbnail: apiData.thumbnail || "",
+        is_video: apiData.is_video || false,
+        image_count: apiData.image_count || 1,
+        backendVideoLinks: [],
+        backendCaptionLinks: (apiData.caption_links || []).map(mapLink)
+      };
+    }
+
+    function normalizeProfileData(apiData) {
+      const mapLink = (l) => ({
+        raw: l.url || l.raw,
+        url: l.normalized_url || l.url,
+        source: l.source || "Caption",
+        timestamp: l.timestamp || null,
+        context: l.context || ""
+      });
+      return {
+        url: apiData.profile_url || apiData.url,
+        profileName: apiData.profile_name,
+        profileBio: apiData.profile_bio || "",
+        postCount: apiData.post_count || 0,
+        tldr: apiData.summary_tldr || apiData.tldr,
+        posts: (apiData.posts || []).map(p => ({
+          shortcode: p.shortcode,
+          url: p.url,
+          author: p.author,
+          title: p.title,
+          caption: p.caption || "",
+          is_video: p.is_video || false,
+          duration: formatDuration(p.duration_seconds),
+          thumbnail: p.thumbnail || "",
+          links: (p.caption_links || []).map(mapLink)
+        })),
+        allLinks: (apiData.all_caption_links || []).map(mapLink)
+      };
+    }
+
+    function renderPostResult(data) {
+      currentResult = data;
+      currentResult._videoLinks = [];
+      currentResult._captionLinks = data.backendCaptionLinks;
+
+      // Update summary card
+      document.getElementById("reelAuthorBadge").textContent = data.author;
+      document.getElementById("reelDurationBadge").textContent = data.duration;
+      document.getElementById("reelShortcodeText").textContent = `ID: ${data.shortcode}`;
+      document.getElementById("reelTitleHeading").textContent = data.title;
+      document.getElementById("summaryTldrText").textContent = data.tldr;
+
+      const bulletsEl = document.getElementById("summaryBulletsList");
+      bulletsEl.innerHTML = data.bullets.map(b => `
+        <li class="flex items-start gap-2">
+          <span class="w-1.5 h-1.5 rounded-full bg-pink-500 mt-2 shrink-0"></span>
+          <span>${b}</span>
+        </li>
+      `).join("");
+
+      const tagsEl = document.getElementById("summaryTagsContainer");
+      tagsEl.innerHTML = (data.tags || []).map(t => `
+        <span class="text-[11px] font-medium px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-600">${t}</span>
+      `).join("");
+
+      // Render Caption Links List
+      const captionListEl = document.getElementById("captionLinksList");
+      if (data.backendCaptionLinks.length === 0) {
+        captionListEl.innerHTML = `<div class="text-xs text-slate-400 italic py-4 text-center">No links found in the post caption.</div>`;
+      } else {
+        captionListEl.innerHTML = data.backendCaptionLinks.map(lk => renderLinkCard(lk, "pink")).join("");
+      }
+
+      // Update counts
+      document.getElementById("videoLinksCount").textContent = "0";
+      document.getElementById("captionLinksCount").textContent = String(data.backendCaptionLinks.length);
+      document.getElementById("totalLinksBadge").textContent = `${data.backendCaptionLinks.length} link(s) found`;
+
+      // Hide video links panel for post mode
+      document.querySelector("#videoLinksList").closest('.grid > div').classList.add('hidden');
+
+      // Clear raw data tabs
+      document.getElementById("tabPanelOcr").innerHTML = '<div class="text-xs text-slate-400 italic py-4 text-center">No video — no frame OCR available.</div>';
+      document.getElementById("tabPanelTranscript").textContent = "(No audio transcript available for image posts)";
+      document.getElementById("tabPanelCaption").textContent = data.caption || "(No caption available)";
+      document.getElementById("activeTabBadge").textContent = "Post Caption";
+
+      // Attach copy handlers
+      document.querySelectorAll(".copy-single-btn").forEach(btn => {
+        btn.addEventListener("click", () => {
+          const urlToCopy = btn.getAttribute("data-copy-url");
+          copyTextToClipboard(urlToCopy, `Copied ${urlToCopy}`);
+        });
+      });
+    }
+
+    function renderProfileResult(data) {
+      currentResult = data;
+
+      // Show profile header
+      const profileHtml = `
+        <div class="bg-gradient-to-r from-pink-50 to-orange-50 rounded-xl p-4 mb-4 border border-pink-100">
+          <div class="flex items-center gap-3">
+            <div class="w-12 h-12 rounded-full bg-slate-900 flex items-center justify-center text-white font-bold text-lg">
+              ${(data.profileName || '?')[0].toUpperCase()}
+            </div>
+            <div>
+              <div class="font-bold text-slate-900">@${data.profileName}</div>
+              <div class="text-xs text-slate-500">${data.postCount} post(s) · ${data.allLinks.length} unique link(s)</div>
+            </div>
+            ${data.profileBio ? `<div class="mt-2 text-xs text-slate-600">${data.profileBio}</div>` : ''}
+          </div>
+        </div>
+      `;
+      document.getElementById("reelAuthorBadge").textContent = `@${data.profileName || 'profile'}`;
+      document.getElementById("reelDurationBadge").textContent = `${data.postCount} posts`;
+      document.getElementById("reelShortcodeText").textContent = "Profile Stack";
+      document.getElementById("reelTitleHeading").textContent = `Stack Summary`;
+      document.getElementById("summaryTldrText").textContent = data.tldr;
+
+      const bulletsEl = document.getElementById("summaryBulletsList");
+      const allTexts = data.posts.map(p => p.caption).filter(Boolean);
+      bulletsEl.innerHTML = allTexts.slice(0, 5).map(b => {
+        const preview = b.split(' ').slice(0, 15).join(' ') + '...';
+        return `<li class="flex items-start gap-2"><span class="w-1.5 h-1.5 rounded-full bg-pink-500 mt-2 shrink-0"></span><span>${preview}</span></li>`;
+      }).join('') || '<li class="text-slate-400 italic">No captions available</li>';
+
+      const tagsEl = document.getElementById("summaryTagsContainer");
+      tagsEl.innerHTML = (data.tags || []).map(t => `
+        <span class="text-[11px] font-medium px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-600">${t}</span>
+      `).join("");
+
+      // Render caption links panel with all links
+      if (data.allLinks.length === 0) {
+        document.getElementById("captionLinksList").innerHTML = `<div class="text-xs text-slate-400 italic py-4 text-center">No links found across any post captions.</div>`;
+      } else {
+        document.getElementById("captionLinksList").innerHTML = data.allLinks.map(lk => renderLinkCard(lk, "pink")).join("");
+      }
+
+      // Hide video links panel
+      document.querySelector("#videoLinksList").closest('.grid > div').classList.add('hidden');
+
+      // Show posts detail in raw data tab
+      const postsHtml = data.posts.map(p => `
+        <div class="mb-3 p-3 rounded-xl bg-slate-50 border border-slate-200">
+          <div class="flex items-center gap-2 mb-1">
+            <a href="${p.url}" target="_blank" rel="noopener noreferrer" class="text-xs font-semibold text-slate-900 hover:text-pink-600 truncate">${p.title || p.shortcode}</a>
+            ${p.is_video ? '<span class="text-[10px] bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded">Video</span>' : '<span class="text-[10px] bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded">Image</span>'}
+          </div>
+          ${p.caption ? `<p class="text-[11px] text-slate-500 line-clamp-2">${p.caption}</p>` : ''}
+          ${p.links.length > 0 ? `<div class="mt-1 text-xs">🔗 ${p.links.map(l => l.url).join(', ')}</div>` : ''}
+        </div>
+      `).join('');
+      document.getElementById("tabPanelOcr").innerHTML = postsHtml || '<div class="text-xs text-slate-400 italic py-4 text-center">No posts found.</div>';
+      document.getElementById("tabPanelTranscript").textContent = "(No transcript available for profile extraction)";
+      document.getElementById("tabPanelCaption").textContent = "";
+      document.getElementById("activeTabBadge").textContent = "All Posts";
+
+      // Counts
+      document.getElementById("videoLinksCount").textContent = "0";
+      document.getElementById("captionLinksCount").textContent = String(data.allLinks.length);
+      document.getElementById("totalLinksBadge").textContent = `${data.allLinks.length} links across ${data.postCount} posts`;
+
+      document.querySelectorAll(".copy-single-btn").forEach(btn => {
+        btn.addEventListener("click", () => {
+          const urlToCopy = btn.getAttribute("data-copy-url");
+          copyTextToClipboard(urlToCopy, `Copied ${urlToCopy}`);
+        });
+      });
+    }
+
+    // Wire up all controls on DOMContentLoaded
+    window.addEventListener("DOMContentLoaded", () => {
+      // No initial render — the user pastes a reel URL and extracts from the
+      // live backend. Empty panels show the "no links yet" placeholder.
+
+      // Mode switching
+      const modeButtons = {
+        reel: document.getElementById("modeReel"),
+        post: document.getElementById("modePost"),
+        profile: document.getElementById("modeProfile"),
+      };
+      const modeHints = {
+        reel: "Paste a reel/video URL and extract — video + OCR + transcript.",
+        post: "Paste a post URL (image or carousel) — caption & links only.",
+        profile: "Paste a profile/tag URL — extracts all posts and combined links.",
+      };
+      let currentMode = "reel";
+      function setMode(mode) {
+        currentMode = mode;
+        Object.entries(modeButtons).forEach(([key, btn]) => {
+          if (btn) {
+            btn.className = key === mode
+              ? "mode-btn text-xs font-semibold px-3 py-1.5 rounded-lg bg-slate-900 text-white shadow-sm"
+              : "mode-btn text-xs font-medium px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:text-slate-900";
+          }
+        });
+        const hint = document.getElementById("modeHint");
+        if (hint) hint.textContent = modeHints[mode] || "";
+      }
+      Object.entries(modeButtons).forEach(([key, btn]) => {
+        if (btn) btn.addEventListener("click", () => setMode(key));
+      });
+      setMode("reel");
+
+      // Extract button & Enter key
+      document.getElementById("extractBtn").addEventListener("click", handleExtract);
+      document.getElementById("reelUrlInput").addEventListener("keydown", (e) => {
+        if (e.key === "Enter") handleExtract();
+      });
+
+      // Clear URL button
+      document.getElementById("clearUrlBtn").addEventListener("click", () => {
+        const inp = document.getElementById("reelUrlInput");
+        inp.value = "";
+        inp.focus();
+      });
+
+      // Copy Video Links, Copy Caption Links, Copy All Links, Copy Summary, Export JSON
+      document.getElementById("copyVideoLinksBtn").addEventListener("click", () => {
+        if (!currentResult || !currentResult._videoLinks.length) {
+          showToast("No video links to copy");
+          return;
+        }
+        const text = currentResult._videoLinks.map(l => `${l.url} (${l.timestamp || l.source})`).join("\n");
+        copyTextToClipboard(text, "Copied video links!");
+      });
+
+      document.getElementById("copyCaptionLinksBtn").addEventListener("click", () => {
+        if (!currentResult || !currentResult._captionLinks.length) {
+          showToast("No caption links to copy");
+          return;
+        }
+        const text = currentResult._captionLinks.map(l => l.url).join("\n");
+        copyTextToClipboard(text, "Copied caption links!");
+      });
+
+      document.getElementById("copyAllLinksBtn").addEventListener("click", () => {
+        if (!currentResult) return;
+        const vLinks = currentResult._videoLinks.map(l => `[Video ${l.timestamp || "OCR"}] ${l.url}`);
+        const cLinks = currentResult._captionLinks.map(l => `[Caption] ${l.url}`);
+        const combined = [...vLinks, ...cLinks].join("\n");
+        copyTextToClipboard(combined || "No links found", "Copied all separated links!");
+      });
+
+      document.getElementById("copySummaryBtn").addEventListener("click", () => {
+        if (!currentResult) return;
+        const summaryMd =
+          `# ${currentResult.title}\n` +
+          `Source: ${currentResult.url} (${currentResult.author})\n\n` +
+          `## TL;DR\n${currentResult.tldr}\n\n` +
+          `## Key Points\n${currentResult.bullets.map(b => "- " + b).join("\n")}\n\n` +
+          `## Links Shown in Video\n${currentResult._videoLinks.map(l => `- ${l.url} (${l.timestamp || "Video"})`).join("\n")}\n\n` +
+          `## Links in Caption\n${currentResult._captionLinks.map(l => `- ${l.url}`).join("\n")}`;
+        copyTextToClipboard(summaryMd, "Copied Markdown summary & links!");
+      });
+
+      document.getElementById("exportJsonBtn").addEventListener("click", () => {
+        if (!currentResult) return;
+        const payload = {
+          reel_url: currentResult.url,
+          shortcode: currentResult.shortcode,
+          author: currentResult.author,
+          title: currentResult.title,
+          summary_tldr: currentResult.tldr,
+          key_points: currentResult.bullets,
+          links_shown_in_video: currentResult._videoLinks,
+          links_in_caption: currentResult._captionLinks
+        };
+        const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+        const dlUrl = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = dlUrl;
+        a.download = `reel_${currentResult.shortcode}_summary_links.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(dlUrl);
+        showToast("Downloaded JSON export!");
+      });
+
+      // Switch Raw Data Tabs (OCR / Transcript / Caption)
+      const tabButtons = document.querySelectorAll(".data-tab-btn");
+      const panels = {
+        ocr: document.getElementById("tabPanelOcr"),
+        transcript: document.getElementById("tabPanelTranscript"),
+        caption: document.getElementById("tabPanelCaption")
+      };
+      const labels = { ocr: "OCR Frames", transcript: "Spoken Transcript", caption: "Post Caption" };
+
+      tabButtons.forEach(btn => {
+        btn.addEventListener("click", () => {
+          const target = btn.getAttribute("data-tab");
+          tabButtons.forEach(b => {
+            b.className = "data-tab-btn text-xs font-medium px-2.5 py-1 rounded-md text-slate-600 hover:text-slate-900";
+          });
+          btn.className = "data-tab-btn text-xs font-semibold px-2.5 py-1 rounded-md bg-white text-slate-900 shadow-sm";
+          Object.keys(panels).forEach(k => {
+            panels[k].classList.toggle("hidden", k !== target);
+          });
+          document.getElementById("activeTabBadge").textContent = labels[target] || "";
+        });
+      });
+
+      // Modal open/close
+      const modal = document.getElementById("guideModal");
+      document.getElementById("openGuideBtn").addEventListener("click", () => modal.classList.remove("hidden"));
+      document.getElementById("closeGuideBtn").addEventListener("click", () => modal.classList.add("hidden"));
+      document.getElementById("closeGuideFooterBtn").addEventListener("click", () => modal.classList.add("hidden"));
+    });
+  </script>
+</body>
+</html>
