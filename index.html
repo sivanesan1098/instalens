@@ -107,6 +107,19 @@
         </div>
         <span id="pipelineShortcodeBadge" class="text-[11px] font-mono bg-slate-800 px-2 py-0.5 rounded text-slate-300"></span>
       </div>
+
+      <!-- Detailed Progress Panel -->
+      <div id="progressPanel" class="hidden bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
+        <div class="flex items-center justify-between">
+          <h4 class="text-sm font-semibold text-slate-900">Extraction Progress</h4>
+          <span id="progressStage" class="text-xs font-mono text-slate-500">Initializing...</span>
+        </div>
+        <div class="w-full bg-slate-200 rounded-full h-2 overflow-hidden">
+          <div id="progressBar" class="bg-gradient-to-r from-pink-500 to-orange-500 h-2 rounded-full transition-all duration-300" style="width: 0%"></div>
+        </div>
+        <div id="progressDetail" class="text-xs text-slate-500 font-mono"></div>
+        <div id="progressSubSteps" class="hidden space-y-1 text-[10px] text-slate-400"></div>
+      </div>
     </section>
 
     <!-- SEPARATE LINKS SECTION (Primary Requirement: Video Links vs Caption Links) -->
@@ -516,8 +529,15 @@
       const stepText = document.getElementById("pipelineStepText");
       const codeBadge = document.getElementById("pipelineShortcodeBadge");
       const shortcode = parseShortcode(urlInput);
+      const progressPanel = document.getElementById("progressPanel");
+      const progressBar = document.getElementById("progressBar");
+      const progressStage = document.getElementById("progressStage");
+      const progressDetail = document.getElementById("progressDetail");
+      const progressSubSteps = document.getElementById("progressSubSteps");
+      const progressStepText = document.getElementById("pipelineStepText");
 
       statusBox.classList.remove("hidden");
+      progressPanel.classList.remove("hidden");
       codeBadge.textContent = `Shortcode: ${shortcode}`;
 
       // Determine endpoint based on selected mode
@@ -532,9 +552,9 @@
         stepLabel = "Fetching profile posts & caption links...";
       } else {
         backendUrl = "http://localhost:8000/api/extract";
-        stepLabel = "Step 1/3: Downloading Instagram video via yt-dlp...";
+        stepLabel = "Starting extraction...";
       }
-      stepText.textContent = stepLabel;
+      progressStepText.textContent = stepLabel;
 
       // Probe /health first so a missing dependency reports as a clear message
       // ("whisper not installed") instead of a silent empty result.
@@ -544,10 +564,34 @@
           const h = await health.json();
           const missing = Object.entries(h.components || {}).filter(([, v]) => !v).map(([k]) => k);
           if (missing.length) {
-            stepText.textContent = `Backend reachable; unavailable components: ${missing.join(", ")}. Results may be partial.`;
+            progressStepText.textContent = `Backend reachable; unavailable components: ${missing.join(", ")}. Results may be partial.`;
           }
         }
       } catch (_) { /* health probe is advisory — extraction still runs */ }
+
+      // For Reel/Video mode, connect to WebSocket for real-time progress
+      let ws = null;
+      if (mode === "reel") {
+        const wsUrl = `ws://localhost:8000/ws/progress/${shortcode}`;
+        ws = new WebSocket(wsUrl);
+        ws.onopen = () => {
+          console.log("WebSocket connected for progress updates");
+        };
+        ws.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data);
+            updateProgressUI(data);
+          } catch (e) {
+            console.warn("Failed to parse progress message:", e);
+          }
+        };
+        ws.onerror = (err) => {
+          console.warn("WebSocket error:", err);
+        };
+        ws.onclose = () => {
+          console.log("WebSocket closed");
+        };
+      }
 
       let resp;
       try {
@@ -558,12 +602,16 @@
         });
       } catch (err) {
         statusBox.classList.add("hidden");
+        progressPanel.classList.add("hidden");
+        if (ws) ws.close();
         showToast("Backend unreachable — is uvicorn running on :8000?");
         return;
       }
 
       if (!resp.ok) {
         statusBox.classList.add("hidden");
+        progressPanel.classList.add("hidden");
+        if (ws) ws.close();
         let detail = "Unknown error";
         try {
           const errBody = await resp.json();
@@ -574,7 +622,9 @@
       }
 
       const apiData = await resp.json();
-      stepText.textContent = "Processing results...";
+      if (ws) {
+        ws.close();
+      }
 
       if (mode === "post") {
         renderPostResult(normalizePostData(apiData));
@@ -584,7 +634,71 @@
         renderResult(normalizeApiData(apiData));
       }
       statusBox.classList.add("hidden");
+      progressPanel.classList.add("hidden");
       showToast("Extracted via Live Backend!");
+    }
+
+    function updateProgressUI(data) {
+      const progressBar = document.getElementById("progressBar");
+      const progressStage = document.getElementById("progressStage");
+      const progressDetail = document.getElementById("progressDetail");
+      const progressSubSteps = document.getElementById("progressSubSteps");
+      const progressStepText = document.getElementById("pipelineStepText");
+
+      const stage = data.stage;
+      const step = data.step;
+      const totalSteps = data.total_steps;
+      const message = data.message;
+      const progressPercent = totalSteps > 0 ? Math.round((step / totalSteps) * 100) : 0;
+
+      // Update progress bar
+      progressBar.style.width = `${progressPercent}%`;
+
+      // Update stage label
+      const stageLabels = {
+        init: "Initializing",
+        download: "Downloading Video",
+        metadata: "Processing Metadata",
+        caption_links: "Extracting Caption Links",
+        ocr: "Scanning Frames (OCR)",
+        transcribe: "Transcribing Audio",
+        summary: "Generating Summary",
+        complete: "Complete"
+      };
+      progressStage.textContent = stageLabels[stage] || stage;
+
+      // Update main step text
+      progressStepText.textContent = message;
+
+      // Update detail
+      let detailText = `Step ${step}/${totalSteps} • ${progressPercent}%`;
+      if (data.data) {
+        const d = data.data;
+        if (d.frames_scanned !== undefined) {
+          detailText += ` | Frame ${d.frames_scanned}/${d.total_estimated} @ ${d.current_timestamp}`;
+        }
+        if (d.file_size) {
+          detailText += ` | ${(d.file_size / 1024 / 1024).toFixed(1)} MB`;
+        }
+      }
+      progressDetail.textContent = detailText;
+
+      // Show sub-steps for OCR
+      if (stage === "ocr" && data.data && data.data.frames_scanned !== undefined) {
+        progressSubSteps.classList.remove("hidden");
+        const frames = data.data.frames_scanned;
+        const total = data.data.total_estimated;
+        const ts = data.data.current_timestamp || "0:00";
+        progressSubSteps.innerHTML = `
+          <div>Scanning: Frame ${frames} of ~${total}</div>
+          <div>Current timestamp: ${ts}</div>
+        `;
+      } else if (stage === "transcribe") {
+        progressSubSteps.classList.remove("hidden");
+        progressSubSteps.innerHTML = `<div>Processing audio with Whisper...</div>`;
+      } else {
+        progressSubSteps.classList.add("hidden");
+      }
     }
 
     function formatDuration(seconds) {

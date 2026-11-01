@@ -7,9 +7,13 @@ Video Links (on-screen + spoken) from Caption Links (post description + bio).
 import os
 import re
 import tempfile
-from typing import List, Optional
+import asyncio
+import json
+from typing import List, Optional, Dict, Any
+from dataclasses import dataclass, asdict
+from datetime import datetime
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -27,6 +31,18 @@ try:
 except ImportError:
     HAS_YTDLP = False
 
+try:
+    import pytesseract
+    HAS_OCR = True
+except ImportError:
+    HAS_OCR = False
+
+try:
+    from faster_whisper import WhisperModel
+    HAS_WHISPER = True
+except ImportError:
+    HAS_WHISPER = False
+
 # yt-dlp marks InstagramUserIE as _WORKING = False because it requires
 # browser impersonation that isn't available in all environments. We
 # override it so the profile endpoint can attempt extraction even when
@@ -39,17 +55,50 @@ if HAS_YTDLP:
     except ImportError:
         pass
 
-try:
-    import pytesseract
-    HAS_OCR = True
-except ImportError:
-    HAS_OCR = False
 
-try:
-    from faster_whisper import WhisperModel
-    HAS_WHISPER = True
-except ImportError:
-    HAS_WHISPER = False
+@dataclass
+class ProgressEvent:
+    """Progress event for real-time updates."""
+    stage: str
+    step: int
+    total_steps: int
+    message: str
+    timestamp: str
+    data: Optional[Dict[str, Any]] = None
+
+    def to_json(self) -> str:
+        return json.dumps(asdict(self))
+
+
+class ConnectionManager:
+    """Manages WebSocket connections for progress updates."""
+    def __init__(self):
+        self.active_connections: Dict[str, WebSocket] = {}
+
+    async def connect(self, client_id: str, websocket: WebSocket):
+        await websocket.accept()
+        self.active_connections[client_id] = websocket
+
+    def disconnect(self, client_id: str):
+        self.active_connections.pop(client_id, None)
+
+    async def send_progress(self, client_id: str, event: ProgressEvent):
+        if client_id in self.active_connections:
+            try:
+                await self.active_connections[client_id].send_text(event.to_json())
+            except Exception:
+                self.disconnect(client_id)
+
+    async def broadcast(self, event: ProgressEvent):
+        for client_id, ws in list(self.active_connections.items()):
+            try:
+                await ws.send_text(event.to_json())
+            except Exception:
+                self.disconnect(client_id)
+
+
+manager = ConnectionManager()
+
 
 _whisper_model = None
 
@@ -95,6 +144,20 @@ async def health():
             "whisper": HAS_WHISPER,
         },
     }
+
+
+@app.websocket("/ws/progress/{client_id}")
+async def websocket_progress(websocket: WebSocket, client_id: str):
+    """WebSocket endpoint for real-time progress updates during extraction."""
+    await manager.connect(client_id, websocket)
+    try:
+        while True:
+            # Keep connection alive, wait for client messages (ping/pong)
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        manager.disconnect(client_id)
+    except Exception:
+        manager.disconnect(client_id)
 
 URL_REGEX = re.compile(
     r'(?<!@)(?:https?://|www\.)[^\s<>"{}|\\^`\[\]]+|'
@@ -250,26 +313,24 @@ def _build_post_item(info: dict) -> PostItem:
     )
 
 
-@app.post("/api/extract", response_model=ExtractResponse)
-def process_instagram_video(req: ExtractRequest):
-    shortcode_match = re.search(r'instagram\.com/(?:reel|reels|p|tv)/([^/?#]+)', req.url, re.IGNORECASE)
-    shortcode = shortcode_match.group(1) if shortcode_match else "unknown"
-
-    try:
-        return _extract(req, shortcode)
-    except HTTPException:
-        raise  # yt-dlp fetch failures are already a 400 with a clear detail
-    except Exception as e:
-        # A naked 500 hides the cause from the frontend. Surface it so the
-        # reader sees "av.open got metadata_errors" instead of "Internal Server Error".
-        import traceback
-        raise HTTPException(
-            status_code=500,
-            detail=f"Extraction failed: {type(e).__name__}: {e}\n{traceback.format_exc()[-400:]}",
+async def _extract_with_progress(req: ExtractRequest, shortcode: str, client_id: str) -> ExtractResponse:
+    """Extract with progress updates sent via WebSocket."""
+    total_steps = 8
+    current_step = 0
+    
+    def send_progress(stage: str, step: int, message: str, data: dict = None):
+        event = ProgressEvent(
+            stage=stage,
+            step=step,
+            total_steps=total_steps,
+            message=message,
+            timestamp=datetime.now().isoformat(),
+            data=data
         )
-
-
-def _extract(req: ExtractRequest, shortcode: str) -> ExtractResponse:
+        asyncio.create_task(manager.send_progress(client_id, event))
+    
+    send_progress("init", 0, "Starting extraction...", {"shortcode": shortcode})
+    
     with tempfile.TemporaryDirectory() as tmpdir:
         video_path = os.path.join(tmpdir, "video.mp4")
         ydl_opts = {
@@ -280,6 +341,10 @@ def _extract(req: ExtractRequest, shortcode: str) -> ExtractResponse:
         }
         if req.cookies_from_browser:
             ydl_opts["cookies_from_browser"] = req.cookies_from_browser
+        
+        # Step 1: Download video
+        current_step += 1
+        send_progress("download", current_step, "Downloading video from Instagram...", {"url": req.url})
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(req.url, download=True)
@@ -296,25 +361,34 @@ def _extract(req: ExtractRequest, shortcode: str) -> ExtractResponse:
                 ))
             else:
                 raise HTTPException(status_code=400, detail=f"Failed to fetch Instagram video: {e}")
+        
+        send_progress("metadata", current_step, "Video downloaded, extracting metadata...", {"file_size": os.path.getsize(video_path) if os.path.exists(video_path) else 0})
 
         caption = req.caption_override or info.get("description") or ""
         author = info.get("channel") or info.get("uploader") or "@instagram_creator"
         title = info.get("title") or f"Instagram Reel ({shortcode})"
         duration = float(info.get("video_duration") or info.get("duration") or 0.0)
 
-        # 1. Extract links from caption
+        # Step 2: Extract caption links
+        current_step += 1
+        send_progress("caption_links", current_step, "Extracting links from caption...", {})
         caption_links = extract_urls_from_text(caption, source="caption")
-
-        # 2. Sample video frames for OCR on-screen links & text
+        
+        # Step 3: OCR frames
+        current_step += 1
         ocr_snippets = []
-        video_links_by_key = {}  # key -> ExtractedLink; first sighting wins the source label
-
+        video_links_by_key = {}
+        
         if os.path.exists(video_path) and HAS_OCR:
+            send_progress("ocr", current_step, "Scanning video frames for on-screen text...", {})
             cap = cv2.VideoCapture(video_path)
             fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
             step = max(1, int(fps / max(req.sample_fps, 0.5)))
             frame_idx = 0
             scanned = 0
+            total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+            estimated_frames = min(MAX_OCR_FRAMES, total_frames // step)
+            
             while cap.isOpened() and scanned < MAX_OCR_FRAMES:
                 ret, frame = cap.read()
                 if not ret:
@@ -337,16 +411,26 @@ def _extract(req: ExtractRequest, shortcode: str) -> ExtractResponse:
                             key = normalize_for_dedup(lk.normalized_url)
                             if key not in video_links_by_key:
                                 video_links_by_key[key] = lk
+                    
+                    # Send progress every few frames
+                    if scanned % 3 == 0 or scanned == estimated_frames:
+                        send_progress("ocr", current_step, 
+                            f"OCR frame {scanned}/{estimated_frames} at {ts_str}...",
+                            {"frames_scanned": scanned, "total_estimated": estimated_frames, "current_timestamp": ts_str})
                 frame_idx += 1
             cap.release()
-
-        # 3. Transcribe audio with faster-whisper if installed
+        
+        # Step 4: Transcribe audio
+        current_step += 1
         transcript_parts = []
         whisper_ok = False
         whisper_error = None
+        
         if os.path.exists(video_path) and HAS_WHISPER:
+            send_progress("transcribe", current_step, "Loading Whisper model...", {})
             try:
                 model = _get_whisper_model()
+                send_progress("transcribe", current_step, "Transcribing audio...", {})
                 segments, info = model.transcribe(video_path)
                 whisper_ok = bool(info)
                 for seg in segments:
@@ -359,6 +443,7 @@ def _extract(req: ExtractRequest, shortcode: str) -> ExtractResponse:
             except Exception as e:
                 whisper_error = f"{type(e).__name__}: {e}"
                 whisper_ok = False
+        
         video_links = list(video_links_by_key.values())
         transcript = "\n".join(transcript_parts) if transcript_parts else (
             f"(No spoken audio detected)" if whisper_ok else (
@@ -366,8 +451,11 @@ def _extract(req: ExtractRequest, shortcode: str) -> ExtractResponse:
                 "(Transcription unavailable: faster-whisper not installed)"
             )
         )
-
-        # 4. Generate concise summary
+        
+        # Step 5: Generate summary
+        current_step += 1
+        send_progress("summary", current_step, "Generating summary...", {})
+        
         combined_text = f"Caption: {caption}\nTranscript: {transcript}\nOn-Screen OCR: " + " | ".join(
             f"[{s['timestamp']}] {s['text']}" for s in ocr_snippets
         )
@@ -377,7 +465,16 @@ def _extract(req: ExtractRequest, shortcode: str) -> ExtractResponse:
             f"Detected {len(video_links)} link(s) inside the video and {len(caption_links)} link(s) in the caption."
         )
         key_points = lines[:5] if lines else ["Extracted metadata and scanned frames for links."]
-
+        
+        # Step 6: Finalize
+        current_step += 1
+        send_progress("complete", current_step, "Extraction complete!", {
+            "video_links": len(video_links),
+            "caption_links": len(caption_links),
+            "ocr_frames": len(ocr_snippets),
+            "transcript_length": len(transcript),
+        })
+        
         return ExtractResponse(
             reel_url=req.url,
             shortcode=shortcode,
@@ -391,6 +488,24 @@ def _extract(req: ExtractRequest, shortcode: str) -> ExtractResponse:
             key_points=key_points,
             video_links=video_links,
             caption_links=caption_links,
+        )
+
+
+@app.post("/api/extract", response_model=ExtractResponse)
+async def process_instagram_video(req: ExtractRequest):
+    shortcode_match = re.search(r'instagram\.com/(?:reel|reels|p|tv)/([^/?#]+)', req.url, re.IGNORECASE)
+    shortcode = shortcode_match.group(1) if shortcode_match else "unknown"
+
+    try:
+        # For backward compatibility, run without progress if no client_id
+        return await _extract_with_progress(req, shortcode, client_id="default")
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        raise HTTPException(
+            status_code=500,
+            detail=f"Extraction failed: {type(e).__name__}: {e}\n{traceback.format_exc()[-400:]}",
         )
 
 
