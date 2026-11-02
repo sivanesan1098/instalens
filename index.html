@@ -764,7 +764,9 @@
         is_video: apiData.is_video || false,
         image_count: apiData.image_count || 1,
         backendVideoLinks: [],
-        backendCaptionLinks: (apiData.caption_links || []).map(mapLink)
+        backendCaptionLinks: (apiData.caption_links || []).map(mapLink),
+        // OCR text extracted from each carousel image's thumbnail
+        ocrFrames: apiData.ocr_frames || []
       };
     }
 
@@ -802,6 +804,16 @@
       currentResult._videoLinks = [];
       currentResult._captionLinks = data.backendCaptionLinks;
 
+      // Photo carousels have no video, so any on-screen links come from
+      // the OCR of each carousel image's thumbnail (see backend ocr_frames).
+      const videoMap = new Map();
+      for (const frame of (data.ocrFrames || [])) {
+        for (const lk of extractLinksFromText(frame.text, "Frame OCR", `Image ${frame.index + 1}`)) {
+          if (!videoMap.has(lk.url.toLowerCase())) videoMap.set(lk.url.toLowerCase(), lk);
+        }
+      }
+      const videoLinks = Array.from(videoMap.values());
+
       // Update summary card
       document.getElementById("reelAuthorBadge").textContent = data.author;
       document.getElementById("reelDurationBadge").textContent = data.duration;
@@ -830,19 +842,38 @@
         captionListEl.innerHTML = data.backendCaptionLinks.map(lk => renderLinkCard(lk, "pink")).join("");
       }
 
+      // Render Video Links List (on-screen text from carousel images)
+      const videoListEl = document.getElementById("videoLinksList");
+      const videoPanel = videoListEl.closest('.grid > div');
+      if (videoLinks.length === 0) {
+        videoListEl.innerHTML = `<div class="text-xs text-slate-400 italic py-4 text-center">No on-screen links detected in carousel images.</div>`;
+        if (videoPanel) videoPanel.classList.add('hidden');
+      } else {
+        videoListEl.innerHTML = videoLinks.map(lk => renderLinkCard(lk, "indigo")).join("");
+        if (videoPanel) videoPanel.classList.remove('hidden');
+      }
+
       // Update counts
-      document.getElementById("videoLinksCount").textContent = "0";
+      document.getElementById("videoLinksCount").textContent = String(videoLinks.length);
       document.getElementById("captionLinksCount").textContent = String(data.backendCaptionLinks.length);
-      document.getElementById("totalLinksBadge").textContent = `${data.backendCaptionLinks.length} link(s) found`;
+      document.getElementById("totalLinksBadge").textContent = `${videoLinks.length + data.backendCaptionLinks.length} link(s) found`;
 
-      // Hide video links panel for post mode
-      document.querySelector("#videoLinksList").closest('.grid > div').classList.add('hidden');
-
-      // Clear raw data tabs
-      document.getElementById("tabPanelOcr").innerHTML = '<div class="text-xs text-slate-400 italic py-4 text-center">No video — no frame OCR available.</div>';
+      // Populate OCR Frames tab with carousel image OCR
+      const ocrEl = document.getElementById("tabPanelOcr");
+      const frames = data.ocrFrames || [];
+      if (frames.length === 0) {
+        ocrEl.innerHTML = '<div class="text-xs text-slate-400 italic py-4 text-center">No on-screen text detected in carousel images.</div>';
+      } else {
+        ocrEl.innerHTML = frames.map(f => `
+          <div class="p-2.5 rounded-lg bg-slate-50 border border-slate-200 text-xs flex items-start gap-2">
+            <span class="font-mono font-semibold text-indigo-600 shrink-0">[Image ${f.index + 1}]</span>
+            <span class="text-slate-700">${(f.text || "").replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]))}</span>
+          </div>
+        `).join("");
+      }
       document.getElementById("tabPanelTranscript").textContent = "(No audio transcript available for image posts)";
       document.getElementById("tabPanelCaption").textContent = data.caption || "(No caption available)";
-      document.getElementById("activeTabBadge").textContent = "Post Caption";
+      document.getElementById("activeTabBadge").textContent = "Carousel OCR";
 
       // Attach copy handlers
       document.querySelectorAll(".copy-single-btn").forEach(btn => {

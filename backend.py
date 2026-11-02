@@ -6,6 +6,7 @@ Video Links (on-screen + spoken) from Caption Links (post description + bio).
 """
 import os
 import re
+import time
 import tempfile
 import asyncio
 import json
@@ -42,6 +43,12 @@ try:
     HAS_WHISPER = True
 except ImportError:
     HAS_WHISPER = False
+
+try:
+    from curl_cffi import requests as cf_requests
+    HAS_CURL_CFFI = True
+except ImportError:
+    HAS_CURL_CFFI = False
 
 # yt-dlp marks InstagramUserIE as _WORKING = False because it requires
 # browser impersonation that isn't available in all environments. We
@@ -222,6 +229,7 @@ class ExtractPostResponse(BaseModel):
     key_points: List[str]
     caption_links: List[ExtractedLink]
     image_count: int
+    ocr_frames: List[dict] = []
 
 class ExtractProfileResponse(BaseModel):
     """Response for a profile/stack of posts."""
@@ -274,6 +282,111 @@ def format_ts(seconds: float) -> str:
     m = int(seconds // 60)
     s = int(seconds % 60)
     return f"{m}:{s:02d}"
+
+
+# Instagram CDN rejects plain urllib requests (403); curl-cffi's browser
+# impersonation is what the thumbnail URLs actually require.
+_THUMB_HEADERS = {"Referer": "https://www.instagram.com/"}
+
+
+def _download_thumb(url: str, dest_path: str, timeout: int = 25) -> bool:
+    """Download an Instagram CDN thumbnail to dest_path using browser impersonation.
+
+    Returns True on success. CDN URLs are short-lived and can 403 intermittently,
+    so the caller retries with backoff rather than treating one failure as fatal.
+    """
+    if not HAS_CURL_CFFI:
+        return False
+    try:
+        r = cf_requests.get(url, impersonate="chrome120", timeout=timeout, headers=_THUMB_HEADERS)
+        if r.status_code == 200 and len(r.content) > 2000:
+            with open(dest_path, "wb") as f:
+                f.write(r.content)
+            return True
+    except Exception:
+        pass
+    return False
+
+
+def _ocr_image(path: str) -> str:
+    """Run pytesseract OCR on an image file with several preprocessing pipelines.
+
+    Returns the best non-empty text found. Photo carousels often have stylised
+    text (bold, outlined, gradient backgrounds) so a single pipeline isn't enough.
+    """
+    if not HAS_OCR or not HAS_CV2:
+        return ""
+    try:
+        img = cv2.imread(path)
+        if img is None:
+            return ""
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        blurred = cv2.GaussianBlur(gray, (3, 3), 0)
+        candidates = [
+            gray,
+            255 - gray,                                   # inverted
+            cv2.adaptiveThreshold(blurred, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+                                  cv2.THRESH_BINARY, 11, 2),
+            255 - cv2.adaptiveThreshold(blurred, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+                                        cv2.THRESH_BINARY, 11, 2),
+            cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1],
+            255 - cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1],
+        ]
+        # Upscale small thumbnails — OCR accuracy scales with pixel density
+        if gray.shape[0] < 600:
+            candidates = [cv2.resize(c, None, fx=2, fy=2, interpolation=cv2.INTER_CUBIC)
+                          for c in candidates]
+
+        best = ""
+        for g in candidates:
+            for psm in (6, 11, 3):
+                try:
+                    txt = pytesseract.image_to_string(g, config=f"--psm {psm}").strip()
+                except Exception:
+                    continue
+                # Prefer the longest result; tesseract's garbage on empty frames
+                # is short, real text is long.
+                if len(txt) > len(best):
+                    best = txt
+        return best
+    except Exception:
+        return ""
+
+
+def _ocr_carousel_images(info: dict, max_images: int = 10) -> List[dict]:
+    """Download each carousel image's thumbnail and OCR it.
+
+    Returns a list of {index, text, thumbnail_url} dicts, one per image.
+    Thumbnails (not the original photos) are used because the original
+    carousel images are not directly downloadable without auth; the
+    thumbnail is the same composition at lower resolution, which is
+    sufficient for on-screen text detection.
+    """
+    if not HAS_CURL_CFFI or not HAS_OCR:
+        return []
+    results = []
+    entries = info.get("entries") or []
+    for i, entry in enumerate(entries[:max_images]):
+        # Prefer the highest-resolution thumbnail available for this entry
+        thumbs = sorted(entry.get("thumbnails") or [],
+                        key=lambda t: t.get("width") or 0, reverse=True)
+        url = (thumbs[0]["url"] if thumbs else entry.get("thumbnail"))
+        if not url:
+            continue
+        with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tmp:
+            dest = tmp.name
+        text = ""
+        for attempt in range(3):
+            if _download_thumb(url, dest):
+                text = _ocr_image(dest)
+                break
+            time.sleep(2 + attempt * 2)  # backoff on 403
+        try:
+            os.unlink(dest)
+        except OSError:
+            pass
+        results.append({"index": i, "text": text, "thumbnail_url": url})
+    return results
 
 
 def _fetch_info(url: str, cookies_from_browser: Optional[str] = None, skip_download: bool = True) -> dict:
@@ -558,10 +671,21 @@ def process_instagram_post(req: ExtractRequest):
     if info.get("_type") == "playlist" and info.get("entries"):
         image_count = len(info["entries"])
 
+    # OCR each carousel image's thumbnail to find on-screen text/links.
+    # Photo carousels have no video, so this is the only way to surface
+    # text embedded in the images themselves (e.g. a slide deck of URLs).
+    ocr_frames = []
+    if not is_video and image_count > 1:
+        try:
+            ocr_frames = _ocr_carousel_images(info)
+        except Exception:
+            ocr_frames = []
+
     lines = [ln.strip() for ln in caption.splitlines() if ln.strip()]
     summary_tldr = (
         f"Post by {author} ({'video' if is_video else 'image carousel' if image_count > 1 else 'image'}). "
-        f"Detected {len(caption_links)} link(s) in the caption."
+        f"Detected {len(caption_links)} link(s) in the caption"
+        + (f" and {len(ocr_frames)} image(s) with on-screen text." if ocr_frames else ".")
     )
     key_points = lines[:5] if lines else ["Extracted post metadata and caption links."]
 
@@ -578,6 +702,7 @@ def process_instagram_post(req: ExtractRequest):
         key_points=key_points,
         caption_links=caption_links,
         image_count=image_count,
+        ocr_frames=ocr_frames,
     )
 
 
