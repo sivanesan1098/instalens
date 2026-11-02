@@ -311,6 +311,7 @@
     // No preset datasets — every extraction runs against the live backend
     // (http://localhost:8000/api/extract) so results reflect the real reel.
     let currentResult = null;
+    let currentMode = "reel";
 
     // Regex that captures full URLs (https://...) and bare domains (github.com/..., reeldex.io, etc.)
     const LINK_REGEX = /(?:https?:\/\/|www\.)[^\s<>"'`)\]]+|\b(?:[a-zA-Z0-9-]+\.)+(?:com|io|ai|dev|org|net|co|app|me|ly|gg|sh|xyz|ee|tv|so|link|notion|substack|gumroad|patreon|etsy|shopify|spotify|soundcloud|bandcamp|vimeo|dailymotion|loom|streamable|clips|cdn|store)(?:\/[^\s<>"'`)\]]*)?/gi;
@@ -943,7 +944,6 @@
         post: "Paste a post URL (image or carousel) — caption & links only.",
         profile: "Paste a profile/tag URL — extracts all posts and combined links.",
       };
-      let currentMode = "reel";
       function setMode(mode) {
         currentMode = mode;
         Object.entries(modeButtons).forEach(([key, btn]) => {
