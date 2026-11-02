@@ -277,12 +277,20 @@ def format_ts(seconds: float) -> str:
 
 
 def _fetch_info(url: str, cookies_from_browser: Optional[str] = None, skip_download: bool = True) -> dict:
-    """Fetch Instagram metadata via yt-dlp without downloading video."""
+    """Fetch Instagram metadata via yt-dlp without downloading video.
+
+    `ignore_no_formats_error` is critical: yt-dlp's InstagramIE raises
+    "No video formats found" for photo carousels (which have no video_versions).
+    With this flag set, the extractor returns the post as a `_type: playlist`
+    with one entry per carousel image instead of raising — which is exactly
+    what the Single Post endpoint needs (caption, thumbnail, image_count).
+    """
     ydl_opts = {
         "quiet": True,
         "no_warnings": True,
         "skip_download": skip_download,
         "extract_flat": skip_download,
+        "ignore_no_formats_error": True,
     }
     if cookies_from_browser:
         ydl_opts["cookies_from_browser"] = cookies_from_browser
@@ -536,7 +544,13 @@ def process_instagram_post(req: ExtractRequest):
     title = info.get("title") or f"Post by {author}"
     is_video = bool(info.get("formats"))
     duration = float(info.get("video_duration") or info.get("duration") or 0.0)
+    # yt-dlp returns `thumbnail: None` at the playlist level for carousels;
+    # fall back to the first entry's thumbnail so the UI can render a preview.
     thumbnail = info.get("thumbnail") or ""
+    if not thumbnail:
+        entries = info.get("entries") or []
+        if entries:
+            thumbnail = entries[0].get("thumbnail") or ""
     caption_links = extract_urls_from_text(caption, source="caption")
 
     # Count carousel images
