@@ -43,7 +43,7 @@
 
       <div class="flex items-center gap-2">
         <span id="backendDot" class="w-2 h-2 rounded-full bg-emerald-500"></span>
-        <span id="backendLabel" class="text-xs font-medium text-slate-600">Live Backend · localhost:8000</span>
+        <span id="backendLabel" class="text-xs font-medium text-slate-600">Live Backend · same origin</span>
         <button id="openGuideBtn" type="button" class="text-xs font-medium px-3 py-1.5 rounded-lg bg-slate-900 text-white hover:bg-slate-800 transition">
           How It Works
         </button>
@@ -309,7 +309,8 @@
 
   <script>
     // No preset datasets — every extraction runs against the live backend
-    // (http://localhost:8000/api/extract) so results reflect the real reel.
+    // (served at the same origin as this page, e.g. /api/extract) so results
+    // reflect the real reel regardless of the deployment host.
     let currentResult = null;
     let currentMode = "reel";
 
@@ -546,13 +547,13 @@
       let backendUrl;
       let stepLabel;
       if (mode === "post") {
-        backendUrl = "http://localhost:8000/api/extract/post";
+        backendUrl = "/api/extract/post";
         stepLabel = "Fetching post metadata & caption links...";
       } else if (mode === "profile") {
-        backendUrl = "http://localhost:8000/api/extract/profile";
+        backendUrl = "/api/extract/profile";
         stepLabel = "Fetching profile posts & caption links...";
       } else {
-        backendUrl = "http://localhost:8000/api/extract";
+        backendUrl = "/api/extract";
         stepLabel = "Starting extraction...";
       }
       progressStepText.textContent = stepLabel;
@@ -560,7 +561,7 @@
       // Probe /health first so a missing dependency reports as a clear message
       // ("whisper not installed") instead of a silent empty result.
       try {
-        const health = await fetch("http://localhost:8000/health");
+        const health = await fetch("/health");
         if (health.ok) {
           const h = await health.json();
           const missing = Object.entries(h.components || {}).filter(([, v]) => !v).map(([k]) => k);
