@@ -111,10 +111,12 @@ _whisper_model = None
 
 
 def _get_whisper_model():
-    """Lazy singleton — loading the ~150MB base model on every request is wasteful."""
+    """Lazy singleton — loads once and reuses for every request."""
     global _whisper_model
+    # ponytail: tiny model keeps idle footprint ~350MB on a 952MB box;
+    # base (~150MB) OOMs under 2 vCPU / <1GB RAM.
     if _whisper_model is None:
-        _whisper_model = WhisperModel("base", device="cpu", compute_type="int8")
+        _whisper_model = WhisperModel("tiny", device="cpu", compute_type="int8")
     return _whisper_model
 
 app = FastAPI(title="InstaLens Video Summarizer & Link Extractor API")
@@ -173,8 +175,9 @@ URL_REGEX = re.compile(
 )
 
 # At least 1 frame every 0.5s for reliable on-screen text detection; a 10-min reel
-# at 0.5fps is 300 frames, so 60 frames gives ~2 minutes of coverage.
-MAX_OCR_FRAMES = 60
+# at 0.5fps is 300 frames. 30 frames covers ~1 minute — halved from 60 to keep
+# cv2 memory under ~100MB on a 952MB box (see _get_whisper_model for the RAM ceiling).
+MAX_OCR_FRAMES = 30
 
 class ExtractRequest(BaseModel):
     url: str

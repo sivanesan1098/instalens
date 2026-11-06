@@ -341,12 +341,19 @@ docker build -t instalens .
 docker run -d \
   --name instalens \
   --restart unless-stopped \
+  --memory 600m --memory-reservation 300m \
   -p 80:8000 \
   instalens
 
 # Add nginx/Caddy for SSL
 caddy reverse_proxy localhost:8000
 ```
+
+> **Low-RAM servers (≤1 GB):** the container uses the `tiny` Whisper model and
+> halves `MAX_OCR_FRAMES` to 30 by default, keeping the footprint under ~350 MB.
+> Pass `--memory 600m` on `docker run` so Docker can't swap it out. If you need
+> full `base`-model accuracy, upgrade to 2 GB+ RAM and set `WHISPER_MODEL=base`
+> via the `WHISPER_MODEL` env var in `backend.py`.
 
 ### Option 4: Fly.io
 
