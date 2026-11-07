@@ -1,3 +1,88 @@
+# ==============================================================================
+# Python & Virtual Environments
+# ==============================================================================
 __pycache__/
-*.pyc
+*.py[cod]
+*$py.class
+.Python
 .venv/
+env/
+venv/
+ENV/
+*.egg-info/
+dist/
+build/
+
+# ==============================================================================
+# Environment Variables & Secrets
+# ==============================================================================
+.env
+.env.*
+!.env.example
+*.keystore
+*.jks
+key.properties
+mobile/android/key.properties
+
+# ==============================================================================
+# Operating System & IDE Files
+# ==============================================================================
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+*.swp
+*.swo
+*.iml
+*.ipr
+*.iws
+.idea/
+.vscode/
+
+# ==============================================================================
+# Local AI Assistant Sessions & Design Mockups
+# ==============================================================================
+.claude/
+.playwright-mcp/
+stitch/
+conversation-context.md
+
+# ==============================================================================
+# Mobile / Flutter Core & Caches
+# ==============================================================================
+mobile/.dart_tool/
+mobile/.flutter-plugins
+mobile/.flutter-plugins-dependencies
+mobile/.pub-cache/
+mobile/.pub/
+mobile/build/
+mobile/doc/api/
+
+# ==============================================================================
+# Mobile / Android Machine-Specific Configs & Build Outputs
+# ==============================================================================
+mobile/android/local.properties
+mobile/android/.gradle/
+mobile/android/captures/
+mobile/android/app/build/
+mobile/android/app/debug/
+mobile/android/app/profile/
+mobile/android/app/release/
+
+# ==============================================================================
+# Mobile / iOS & Desktop Ephemeral Files
+# ==============================================================================
+mobile/ios/Flutter/Generated.xcconfig
+mobile/ios/Flutter/flutter_export_environment.sh
+mobile/ios/Flutter/Flutter.podspec
+mobile/ios/Pods/
+mobile/ios/.symlinks/
+mobile/ios/**/DerivedData/
+mobile/ios/**/xcuserdata/
+mobile/macos/Flutter/ephemeral/
+mobile/linux/flutter/ephemeral/
+mobile/windows/flutter/ephemeral/
+stitch/*
